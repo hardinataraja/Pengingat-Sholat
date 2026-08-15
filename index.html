@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Nur-Companion - Pengingat Sholat & Tasbih Digital</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #090d16;
+            color: #f8fafc;
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .compass-needle { transition: transform 0.3s ease-out; }
+        @keyframes pulse-ring {
+            0% { box-shadow: 0 0 0 0 rgba(16,185,129,0.45); }
+            100% { box-shadow: 0 0 0 22px rgba(16,185,129,0); }
+        }
+        .pulse-active { animation: pulse-ring 1.8s infinite; }
+        input[type="text"], input[type="number"], select {
+            background-color: rgb(30 41 59 / 1);
+            border: 1px solid rgb(51 65 85 / 1);
+        }
+        html, body { height: 100%; margin: 0; overscroll-behavior: none; }
+        #app-root { height: 100dvh; }
+        .safe-top { padding-top: max(0.9rem, env(safe-area-inset-top)); }
+        .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+    </style>
+</head>
+<body>
+
+    <div id="app-root" class="w-full bg-[#0f172a] flex flex-col relative overflow-hidden">
+
+        <!-- App Header -->
+        <header class="safe-top px-6 pb-4 bg-slate-900/50 backdrop-blur border-b border-slate-800 flex justify-between items-center z-20">
+            <div>
+                <h1 class="font-bold text-lg text-emerald-400 flex items-center gap-2">
+                    <i class="fa-solid fa-mosque"></i> Nur-Companion
+                </h1>
+                <p id="current-date" class="text-xs text-slate-400">-- / --</p>
+            </div>
+            <button onclick="switchTab('settings')" id="location-badge" class="flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-full text-xs text-emerald-300 border border-emerald-500/20 max-w-[150px]">
+                <i class="fa-solid fa-location-dot"></i>
+                <span id="location-text" class="truncate">Mendeteksi...</span>
+            </button>
+        </header>
+
+        <!-- Scrollable Content -->
+        <main id="app-content" class="flex-1 overflow-y-auto no-scrollbar p-6 pb-24 space-y-6">
+
+            <!-- VIEW: HOME -->
+            <div id="view-home" class="space-y-6">
+                <div class="bg-gradient-to-br from-emerald-600 to-teal-800 rounded-3xl p-6 text-white shadow-lg relative overflow-hidden">
+                    <div class="absolute -right-6 -bottom-6 text-white/10 text-9xl"><i class="fa-solid fa-moon"></i></div>
+                    <p class="text-xs font-medium uppercase tracking-wider text-emerald-200">Menuju Sholat Berikutnya</p>
+                    <div class="flex justify-between items-baseline mt-2">
+                        <h2 id="next-prayer-name" class="text-2xl font-bold">-</h2>
+                        <span id="next-prayer-time" class="text-lg font-semibold bg-white/20 px-3 py-1 rounded-xl">--:--</span>
+                    </div>
+                    <div class="mt-4 pt-4 border-t border-white/20 flex justify-between items-center">
+                        <span class="text-sm text-emerald-100">Sisa Waktu</span>
+                        <span id="countdown-timer" class="text-xl font-bold font-mono">--:--:--</span>
+                    </div>
+                </div>
+
+                <div id="alarm-status-banner" class="hidden bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs rounded-2xl p-3 flex items-center gap-2">
+                    <i class="fa-solid fa-bell-slash"></i>
+                    <span>Notifikasi belum diizinkan. Aktifkan di Pengaturan agar alarm sholat berbunyi otomatis.</span>
+                </div>
+
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-sm font-semibold text-slate-300">Jadwal Sholat Hari Ini</h3>
+                        <span id="method-label" class="text-xs text-emerald-400 cursor-pointer" onclick="fetchPrayerTimes(true)">
+                            <i class="fa-solid fa-rotate mr-1"></i>Perbarui
+                        </span>
+                    </div>
+                    <div id="prayer-list" class="space-y-2">
+                        <div class="text-center text-xs text-slate-500 py-6">Memuat jadwal sholat...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: TASBIH -->
+            <div id="view-tasbih" class="hidden space-y-6 text-center">
+                <div class="bg-slate-800/60 border border-slate-700/50 rounded-3xl p-6 shadow-inner">
+                    <div class="flex justify-between items-center mb-4">
+                        <span id="dzikir-title" class="text-xs font-semibold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full">Subhanallah</span>
+                        <button onclick="openDzikirModal()" class="text-slate-400 hover:text-white text-sm"><i class="fa-solid fa-gear"></i> Ganti</button>
+                    </div>
+
+                    <div class="py-8">
+                        <span id="counter-display" class="text-7xl font-bold font-mono text-emerald-400 drop-shadow">0</span>
+                        <p class="text-xs text-slate-400 mt-2">Target: <span id="target-display">33</span>x · Total hari ini: <span id="daily-total-display">0</span>x</p>
+                    </div>
+
+                    <div class="flex justify-center my-4">
+                        <button id="tasbih-btn" onclick="incrementTasbih()" class="w-44 h-44 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-500 shadow-xl shadow-emerald-900/30 active:scale-95 transition transform flex items-center justify-center border-4 border-emerald-400/30">
+                            <div class="w-36 h-36 rounded-full bg-slate-900/20 flex items-center justify-center">
+                                <i class="fa-solid fa-fingerprint text-white/50 text-4xl"></i>
+                            </div>
+                        </button>
+                    </div>
+
+                    <div class="flex justify-center gap-4 mt-6">
+                        <button onclick="resetTasbih()" class="px-4 py-2 bg-slate-700/50 hover:bg-slate-700 rounded-xl text-xs text-slate-300 transition">
+                            <i class="fa-solid fa-rotate-right mr-1"></i> Reset
+                        </button>
+                        <button id="sound-toggle" onclick="toggleSound()" class="px-4 py-2 bg-slate-700/50 hover:bg-slate-700 rounded-xl text-xs text-slate-300 transition">
+                            <i class="fa-solid fa-volume-high mr-1"></i> Suara: Aktif
+                        </button>
+                        <button id="haptic-toggle" onclick="toggleHaptic()" class="px-4 py-2 bg-slate-700/50 hover:bg-slate-700 rounded-xl text-xs text-slate-300 transition">
+                            <i class="fa-solid fa-mobile-screen-button mr-1"></i> Getar: Aktif
+                        </button>
+                    </div>
+                    <p class="text-[10px] text-slate-500 mt-4">Hitungan tersimpan otomatis di perangkat ini.</p>
+                </div>
+            </div>
+
+            <!-- VIEW: DOA -->
+            <div id="view-quran" class="hidden space-y-4">
+                <h3 class="text-sm font-semibold text-slate-300">Dzikir & Doa Pilihan</h3>
+                <div class="space-y-3">
+                    <div class="bg-slate-800/40 border border-slate-700/50 p-4 rounded-2xl">
+                        <h4 class="font-bold text-emerald-400 text-sm">Dzikir Pagi</h4>
+                        <p class="text-xs text-slate-300 mt-1">"Radhitu billahi rabba, wa bil-islami dina, wa bi-muhammadin nabiyya wa rasula."</p>
+                        <span class="text-[10px] text-slate-500 mt-2 block">Dibaca 3x setelah Subuh</span>
+                    </div>
+                    <div class="bg-slate-800/40 border border-slate-700/50 p-4 rounded-2xl">
+                        <h4 class="font-bold text-emerald-400 text-sm">Dzikir Petang</h4>
+                        <p class="text-xs text-slate-300 mt-1">"Amsaina wa amsal mulku lillah, wal hamdu lillah, la ilaha illallahu wahdahu la syarika lah."</p>
+                        <span class="text-[10px] text-slate-500 mt-2 block">Dibaca 1x setelah Ashar</span>
+                    </div>
+                    <div class="bg-slate-800/40 border border-slate-700/50 p-4 rounded-2xl">
+                        <h4 class="font-bold text-emerald-400 text-sm">Doa Mohon Perlindungan</h4>
+                        <p class="text-xs text-slate-300 mt-1">"Allahumma inni as'aluka al-'afwa wal-'afiyah fid-dunya wal-akhirah."</p>
+                        <span class="text-[10px] text-slate-500 mt-2 block">Pagi & Petang</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: QIBLA -->
+            <div id="view-qibla" class="hidden space-y-6 text-center">
+                <div class="bg-slate-800/60 border border-slate-700/50 rounded-3xl p-6 shadow-inner">
+                    <h3 class="text-sm font-semibold text-slate-300 mb-1">Arah Kiblat</h3>
+                    <p id="qibla-bearing-text" class="text-xs text-slate-500 mb-6">Menghitung arah dari lokasi Anda...</p>
+
+                    <div class="relative w-56 h-56 mx-auto flex items-center justify-center">
+                        <div class="absolute inset-0 rounded-full border-2 border-slate-700"></div>
+                        <div class="absolute inset-4 rounded-full border border-slate-800"></div>
+                        <span class="absolute top-2 text-[10px] text-slate-500">U</span>
+                        <span class="absolute bottom-2 text-[10px] text-slate-500">S</span>
+                        <span class="absolute left-2 text-[10px] text-slate-500">B</span>
+                        <span class="absolute right-2 text-[10px] text-slate-500">T</span>
+                        <div id="qibla-needle" class="compass-needle absolute w-1.5 h-24 bg-gradient-to-t from-transparent to-emerald-400 rounded-full origin-bottom" style="bottom: 50%;"></div>
+                        <div class="w-4 h-4 rounded-full bg-emerald-400 border-2 border-slate-900 z-10"></div>
+                        <i class="fa-solid fa-kaaba absolute text-amber-400 text-lg" id="kaaba-icon" style="top: 14px;"></i>
+                    </div>
+
+                    <button onclick="requestCompassAccess()" id="compass-btn" class="mt-8 px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 rounded-xl text-xs text-emerald-300 transition">
+                        <i class="fa-solid fa-compass mr-1"></i> Aktifkan Kompas Perangkat
+                    </button>
+                    <p class="text-[10px] text-slate-500 mt-3">Jika kompas tidak aktif, arahkan perangkat sesuai sudut derajat di atas relatif terhadap Utara.</p>
+                </div>
+            </div>
+
+            <!-- VIEW: SETTINGS -->
+            <div id="view-settings" class="hidden space-y-5">
+                <h3 class="text-sm font-semibold text-slate-300">Pengaturan</h3>
+
+                <div class="bg-slate-800/40 border border-slate-700/50 p-4 rounded-2xl space-y-3">
+                    <p class="text-xs font-semibold text-emerald-400">Lokasi</p>
+                    <div class="flex gap-2">
+                        <button onclick="setLocationMode('gps')" id="mode-gps-btn" class="flex-1 py-2 rounded-xl text-xs bg-emerald-600 text-white">GPS Otomatis</button>
+                        <button onclick="setLocationMode('manual')" id="mode-manual-btn" class="flex-1 py-2 rounded-xl text-xs bg-slate-700 text-slate-300">Manual</button>
+                    </div>
+                    <div id="manual-location-fields" class="hidden space-y-2 pt-2">
+                        <input id="input-city" type="text" placeholder="Nama kota (mis. Mojosari)" class="w-full text-xs rounded-xl px-3 py-2 text-white placeholder-slate-500">
+                        <input id="input-country" type="text" placeholder="Negara (mis. Indonesia)" class="w-full text-xs rounded-xl px-3 py-2 text-white placeholder-slate-500">
+                        <button onclick="applyManualLocation()" class="w-full py-2 rounded-xl text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-semibold">Simpan Lokasi</button>
+                    </div>
+                </div>
+
+                <div class="bg-slate-800/40 border border-slate-700/50 p-4 rounded-2xl space-y-2">
+                    <p class="text-xs font-semibold text-emerald-400">Metode Perhitungan</p>
+                    <select id="method-select" onchange="onMethodChange()" class="w-full text-xs rounded-xl px-3 py-2 text-white">
+                        <option value="20">Kemenag RI (Indonesia)</option>
+                        <option value="3">Muslim World League</option>
+                        <option value="2">Islamic Society of North America</option>
+                        <option value="4">Umm al-Qura, Makkah</option>
+                        <option value="5">Egyptian General Authority</option>
+                    </select>
+                </div>
+
+                <div class="bg-slate-800/40 border border-slate-700/50 p-4 rounded-2xl space-y-2">
+                    <p class="text-xs font-semibold text-emerald-400">Koreksi Waktu (Ikhtiyat)</p>
+                    <div class="flex items-center gap-3">
+                        <input id="ikhtiyat-input" type="number" value="2" min="-15" max="15" onchange="onIkhtiyatChange()" class="w-20 text-xs rounded-xl px-3 py-2 text-white">
+                        <span class="text-xs text-slate-400">menit ditambahkan ke setiap waktu sholat</span>
+                    </div>
+                </div>
+
+                <div class="bg-slate-800/40 border border-slate-700/50 p-4 rounded-2xl space-y-3">
+                    <p class="text-xs font-semibold text-emerald-400">Alarm & Notifikasi</p>
+                    <button onclick="enableNotifications()" id="notif-btn" class="w-full py-2 rounded-xl text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-semibold flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-bell"></i> <span id="notif-btn-text">Aktifkan Alarm Otomatis</span>
+                    </button>
+                    <p class="text-[10px] text-slate-500 leading-relaxed">Alarm dicek otomatis selama aplikasi terbuka di latar depan/belakang browser. Untuk alarm yang tetap berbunyi walau aplikasi ditutup total setelah dikonversi ke APK (mis. via Median.co), aktifkan modul Push Notification native di pengaturan Median agar dijadwalkan oleh sistem Android, bukan hanya oleh JavaScript.</p>
+                </div>
+
+                <div class="bg-slate-800/40 border border-slate-700/50 p-4 rounded-2xl">
+                    <p class="text-xs font-semibold text-emerald-400 mb-1">Tentang Perhitungan</p>
+                    <p class="text-[10px] text-slate-500 leading-relaxed">Jadwal dihitung real-time melalui layanan Aladhan berdasarkan koordinat lokasi dan metode yang dipilih. Selalu sesuaikan dengan jadwal resmi masjid setempat jika tersedia.</p>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- Toast -->
+        <div id="notification-toast" class="hidden fixed left-4 right-4 bg-emerald-600 text-white p-3 rounded-2xl shadow-xl transition-all duration-300 items-center gap-3 z-50" style="top: max(0.75rem, env(safe-area-inset-top));">
+            <i class="fa-solid fa-bell bg-white/20 p-2 rounded-xl"></i>
+            <div class="flex-1 min-w-0">
+                <h5 class="text-xs font-bold" id="toast-title">Pengingat Sholat</h5>
+                <p class="text-[11px] text-emerald-100" id="toast-desc">Waktu sholat telah tiba.</p>
+            </div>
+            <button onclick="hideToast()" class="text-white/70 hover:text-white shrink-0 px-1"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <!-- Dzikir Modal -->
+        <div id="dzikir-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end hidden">
+            <div class="bg-slate-900 w-full rounded-t-[32px] p-6 border-t border-slate-800 space-y-4">
+                <div class="flex justify-between items-center">
+                    <h4 class="font-bold text-sm text-white">Pilih Bacaan Dzikir</h4>
+                    <button onclick="closeDzikirModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+                </div>
+                <div class="space-y-2">
+                    <div onclick="selectDzikir('Subhanallah', 33)" class="p-3 bg-slate-800 hover:bg-slate-700 rounded-xl cursor-pointer flex justify-between items-center text-sm">
+                        <span>Subhanallah (Maha Suci Allah)</span><span class="text-xs text-emerald-400 font-bold">33x</span>
+                    </div>
+                    <div onclick="selectDzikir('Alhamdulillah', 33)" class="p-3 bg-slate-800 hover:bg-slate-700 rounded-xl cursor-pointer flex justify-between items-center text-sm">
+                        <span>Alhamdulillah (Segala Puji Bagi Allah)</span><span class="text-xs text-emerald-400 font-bold">33x</span>
+                    </div>
+                    <div onclick="selectDzikir('Allahu Akbar', 33)" class="p-3 bg-slate-800 hover:bg-slate-700 rounded-xl cursor-pointer flex justify-between items-center text-sm">
+                        <span>Allahu Akbar (Allah Maha Besar)</span><span class="text-xs text-emerald-400 font-bold">33x</span>
+                    </div>
+                    <div onclick="selectDzikir('Astagfirullah', 100)" class="p-3 bg-slate-800 hover:bg-slate-700 rounded-xl cursor-pointer flex justify-between items-center text-sm">
+                        <span>Astagfirullah (Mohon Ampun)</span><span class="text-xs text-emerald-400 font-bold">100x</span>
+                    </div>
+                    <div onclick="selectDzikir('La ilaha illallah', 100)" class="p-3 bg-slate-800 hover:bg-slate-700 rounded-xl cursor-pointer flex justify-between items-center text-sm">
+                        <span>La ilaha illallah</span><span class="text-xs text-emerald-400 font-bold">100x</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Nav -->
+        <nav class="safe-bottom absolute bottom-0 left-0 right-0 h-20 bg-slate-900/90 backdrop-blur border-t border-slate-800 flex justify-around items-center px-2 z-30">
+            <button onclick="switchTab('home')" id="nav-home" class="flex flex-col items-center gap-1 text-emerald-400 transition w-12">
+                <i class="fa-solid fa-house text-base"></i><span class="text-[9px]">Utama</span>
+            </button>
+            <button onclick="switchTab('tasbih')" id="nav-tasbih" class="flex flex-col items-center gap-1 text-slate-400 hover:text-emerald-400 transition w-12">
+                <i class="fa-solid fa-fingerprint text-base"></i><span class="text-[9px]">Tasbih</span>
+            </button>
+            <button onclick="switchTab('quran')" id="nav-quran" class="flex flex-col items-center gap-1 text-slate-400 hover:text-emerald-400 transition w-12">
+                <i class="fa-solid fa-book-quran text-base"></i><span class="text-[9px]">Doa</span>
+            </button>
+            <button onclick="switchTab('qibla')" id="nav-qibla" class="flex flex-col items-center gap-1 text-slate-400 hover:text-emerald-400 transition w-12">
+                <i class="fa-solid fa-kaaba text-base"></i><span class="text-[9px]">Kiblat</span>
+            </button>
+            <button onclick="switchTab('settings')" id="nav-settings" class="flex flex-col items-center gap-1 text-slate-400 hover:text-emerald-400 transition w-12">
+                <i class="fa-solid fa-gear text-base"></i><span class="text-[9px]">Atur</span>
+            </button>
+        </nav>
+
+    </div>
+
+    <script>
+    /* ============ STORAGE KEYS ============ */
+    const K = {
+        loc: 'nc_location', mode: 'nc_loc_mode', method: 'nc_method',
+        ikhtiyat: 'nc_ikhtiyat', notif: 'nc_notif_enabled', tasbih: 'nc_tasbih_state',
+        sound: 'nc_sound_enabled', haptic: 'nc_haptic_enabled', firedAlarms: 'nc_fired_alarms'
+    };
+    function lsGet(key, fallback) {
+        try { const v = localStorage.getItem(key); return v === null ? fallback : JSON.parse(v); }
+        catch (e) { return fallback; }
+    }
+    function lsSet(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {} }
+
+    /* ============ STATE ============ */
+    let state = {
+        lat: null, lng: null, locationLabel: 'Mendeteksi...',
+        mode: lsGet(K.mode, 'gps'),
+        method: lsGet(K.method, '20'),
+        ikhtiyat: lsGet(K.ikhtiyat, 2),
+        notifEnabled: lsGet(K.notif, false),
+        soundEnabled: lsGet(K.sound, true),
+        hapticEnabled: lsGet(K.haptic, true),
+        prayerSchedule: [],
+        nextPrayerDate: null,
+        hijriText: ''
+    };
+    let tasbih = lsGet(K.tasbih, { count: 0, target: 33, name: 'Subhanallah', dailyTotal: 0, dateStr: '' });
+
+    const PRAYER_LABELS = { Imsak: 'Imsak', Fajr: 'Subuh', Sunrise: 'Terbit', Dhuhr: 'Dzuhur', Asr: 'Ashar', Maghrib: 'Maghrib', Isha: 'Isya' };
+    const ALARM_KEYS = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
+
+    /* ============ INIT ============ */
+    window.onload = function () {
+        document.getElementById('method-select').value = state.method;
+        document.getElementById('ikhtiyat-input').value = state.ikhtiyat;
+        setLocationMode(state.mode, true);
+        updateSoundBtn(); updateHapticBtn();
+        renderTasbihUI();
+        updateClock();
+        setInterval(updateClock, 1000);
+        setInterval(checkAlarms, 15000);
+        setInterval(function () {
+            const today = new Date().toDateString();
+            if (state._lastFetchDay && state._lastFetchDay !== today) fetchPrayerTimes(false);
+        }, 60000);
+
+        if (state.notifEnabled && 'Notification' in window && Notification.permission !== 'granted') {
+            state.notifEnabled = false; lsSet(K.notif, false);
+        }
+        updateNotifBtn();
+        initLocation();
+    };
+
+    /* ============ LOCATION ============ */
+    function initLocation() {
+        const saved = lsGet(K.loc, null);
+        if (state.mode === 'manual' && saved && saved.city) {
+            state.locationLabel = saved.city;
+            document.getElementById('input-city').value = saved.city || '';
+            document.getElementById('input-country').value = saved.country || '';
+            fetchPrayerTimesByCity(saved.city, saved.country);
+        } else {
+            useGPS();
+        }
+    }
+
+    function useGPS() {
+        document.getElementById('location-text').innerText = 'Mendeteksi lokasi...';
+        if (!('geolocation' in navigator)) {
+            document.getElementById('location-text').innerText = 'GPS tidak tersedia';
+            showToast('Lokasi Tidak Tersedia', 'Perangkat tidak mendukung GPS. Gunakan lokasi manual di Pengaturan.');
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(function (pos) {
+            state.lat = pos.coords.latitude;
+            state.lng = pos.coords.longitude;
+            state.locationLabel = 'Lokasi GPS (' + state.lat.toFixed(2) + ', ' + state.lng.toFixed(2) + ')';
+            lsSet(K.loc, { lat: state.lat, lng: state.lng });
+            document.getElementById('location-text').innerText = state.locationLabel;
+            fetchPrayerTimes(false);
+            updateQiblaBearing();
+        }, function (err) {
+            document.getElementById('location-text').innerText = 'Izin lokasi ditolak';
+            showToast('Izin Lokasi Diperlukan', 'Aktifkan izin lokasi di pengaturan perangkat, atau gunakan lokasi manual.');
+            const saved = lsGet(K.loc, null);
+            if (saved && saved.lat) { state.lat = saved.lat; state.lng = saved.lng; fetchPrayerTimes(false); updateQiblaBearing(); }
+        }, { enableHighAccuracy: false, timeout: 10000 });
+    }
+
+    function setLocationMode(mode, silent) {
+        state.mode = mode; lsSet(K.mode, mode);
+        document.getElementById('mode-gps-btn').className = mode === 'gps'
+            ? 'flex-1 py-2 rounded-xl text-xs bg-emerald-600 text-white' : 'flex-1 py-2 rounded-xl text-xs bg-slate-700 text-slate-300';
+        document.getElementById('mode-manual-btn').className = mode === 'manual'
+            ? 'flex-1 py-2 rounded-xl text-xs bg-emerald-600 text-white' : 'flex-1 py-2 rounded-xl text-xs bg-slate-700 text-slate-300';
+        document.getElementById('manual-location-fields').classList.toggle('hidden', mode !== 'manual');
+        if (!silent) { if (mode === 'gps') useGPS(); }
+    }
+
+    function applyManualLocation() {
+        const city = document.getElementById('input-city').value.trim();
+        const country = document.getElementById('input-country').value.trim();
+        if (!city) { showToast('Lengkapi Data', 'Masukkan nama kota terlebih dahulu.'); return; }
+        lsSet(K.loc, { city: city, country: country });
+        state.locationLabel = city;
+        document.getElementById('location-text').innerText = city;
+        fetchPrayerTimesByCity(city, country);
+        showToast('Lokasi Disimpan', 'Jadwal sholat diperbarui untuk ' + city + '.');
+    }
+
+    /* ============ PRAYER TIMES (Aladhan API) ============ */
+    function todayDDMMYYYY() {
+        const d = new Date();
+        const pad = n => String(n).padStart(2, '0');
+        return pad(d.getDate()) + '-' + pad(d.getMonth() + 1) + '-' + d.getFullYear();
+    }
+
+    function fetchPrayerTimes(manualTrigger) {
+        if (state.mode === 'manual') {
+            const saved = lsGet(K.loc, null);
+            if (saved && saved.city) return fetchPrayerTimesByCity(saved.city, saved.country);
+        }
+        if (state.lat === null) { if (manualTrigger) useGPS(); return; }
+        const url = 'https://api.aladhan.com/v1/timings/' + todayDDMMYYYY() +
+            '?latitude=' + state.lat + '&longitude=' + state.lng + '&method=' + state.method;
+        loadTimings(url);
+    }
+
+    function fetchPrayerTimesByCity(city, country) {
+        const url = 'https://api.aladhan.com/v1/timingsByCity/' + todayDDMMYYYY() +
+            '?city=' + encodeURIComponent(city) + '&country=' + encodeURIComponent(country || '') + '&method=' + state.method;
+        loadTimings(url);
+    }
+
+    function loadTimings(url) {
+        document.getElementById('prayer-list').innerHTML = '<div class="text-center text-xs text-slate-500 py-6">Memuat jadwal sholat...</div>';
+        fetch(url).then(r => r.json()).then(data => {
+            if (!data || data.code !== 200) throw new Error('bad response');
+            const t = data.data.timings;
+            const hijri = data.data.date.hijri;
+            state.hijriText = hijri.day + ' ' + hijri.month.en + ' ' + hijri.year + ' H';
+            const greg = data.data.date.readable;
+            document.getElementById('current-date').innerText = greg + ' · ' + state.hijriText;
+            buildSchedule(t);
+            state._lastFetchDay = new Date().toDateString();
+        }).catch(() => {
+            document.getElementById('prayer-list').innerHTML = '<div class="text-center text-xs text-rose-400 py-6">Gagal memuat jadwal. Periksa koneksi internet lalu tekan Perbarui.</div>';
+        });
+    }
+
+    function buildSchedule(timings) {
+        const order = ['Imsak', 'Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
+        const now = new Date();
+        const list = order.map(key => {
+            const raw = (timings[key] || '00:00').split(' ')[0];
+            let [h, m] = raw.split(':').map(Number);
+            const dt = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m);
+            dt.setMinutes(dt.getMinutes() + (Number(state.ikhtiyat) || 0));
+            return { key: key, name: PRAYER_LABELS[key], time: dt.toTimeString().slice(0, 5), dateObj: dt };
+        });
+        // find next
+        let next = list.find(p => p.dateObj.getTime() > now.getTime());
+        if (!next) next = list[0]; // after Isha -> show Imsak/next day conceptually
+        list.forEach(p => {
+            p.passed = p.dateObj.getTime() <= now.getTime();
+            p.active = p.key === next.key;
+        });
+        state.prayerSchedule = list;
+        state.nextPrayerDate = next.dateObj;
+        state.nextPrayerKey = next.key;
+        renderPrayerList();
+        renderNextPrayerCard();
+        updateAlarmBanner();
+    }
+
+    function renderPrayerList() {
+        const container = document.getElementById('prayer-list');
+        if (!state.prayerSchedule.length) return;
+        container.innerHTML = state.prayerSchedule.map(p => `
+            <div class="flex justify-between items-center p-3 rounded-2xl bg-slate-800/40 border ${p.active ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-slate-700/50'}">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full ${p.active ? 'bg-emerald-500 text-slate-950 font-bold' : 'bg-slate-800 text-slate-400'} flex items-center justify-center text-xs">
+                        <i class="fa-solid ${p.passed && !p.active ? 'fa-check' : 'fa-clock'}"></i>
+                    </div>
+                    <span class="text-sm font-medium ${p.active ? 'text-emerald-400 font-bold' : 'text-slate-200'}">${p.name}</span>
+                </div>
+                <span class="text-sm font-mono ${p.active ? 'text-emerald-300 font-bold' : 'text-slate-400'}">${p.time}</span>
+            </div>
+        `).join('');
+    }
+
+    function renderNextPrayerCard() {
+        const next = state.prayerSchedule.find(p => p.key === state.nextPrayerKey);
+        if (!next) return;
+        document.getElementById('next-prayer-name').innerText = next.name;
+        document.getElementById('next-prayer-time').innerText = next.time;
+    }
+
+    /* ============ CLOCK / COUNTDOWN ============ */
+    function updateClock() {
+        const now = new Date();
+
+        if (state.nextPrayerDate) {
+            let diff = Math.floor((state.nextPrayerDate.getTime() - now.getTime()) / 1000);
+            if (diff < 0) { fetchPrayerTimes(false); diff = 0; }
+            const hh = String(Math.floor(diff / 3600)).padStart(2, '0');
+            const mm = String(Math.floor((diff % 3600) / 60)).padStart(2, '0');
+            const ss = String(diff % 60).padStart(2, '0');
+            document.getElementById('countdown-timer').innerText = hh + ':' + mm + ':' + ss;
+        }
+    }
+
+    /* ============ ALARM / NOTIFICATIONS ============ */
+    function updateAlarmBanner() {
+        const banner = document.getElementById('alarm-status-banner');
+        const granted = 'Notification' in window && Notification.permission === 'granted' && state.notifEnabled;
+        banner.classList.toggle('hidden', granted);
+    }
+
+    function enableNotifications() {
+        if (!('Notification' in window)) {
+            showToast('Tidak Didukung', 'Browser ini tidak mendukung notifikasi. Gunakan modul push native setelah dikonversi ke APK.');
+            return;
+        }
+        Notification.requestPermission().then(function (perm) {
+            state.notifEnabled = perm === 'granted';
+            lsSet(K.notif, state.notifEnabled);
+            updateNotifBtn(); updateAlarmBanner();
+            if (state.notifEnabled) {
+                showToast('Alarm Aktif', 'Anda akan menerima notifikasi otomatis saat waktu sholat tiba.');
+                unlockAudio();
+            } else {
+                showToast('Izin Ditolak', 'Aktifkan izin notifikasi di pengaturan browser/perangkat untuk alarm otomatis.');
+            }
+        });
+    }
+
+    function updateNotifBtn() {
+        const granted = 'Notification' in window && Notification.permission === 'granted' && state.notifEnabled;
+        document.getElementById('notif-btn-text').innerText = granted ? 'Alarm Otomatis Aktif' : 'Aktifkan Alarm Otomatis';
+        document.getElementById('notif-btn').className = granted
+            ? 'w-full py-2 rounded-xl text-xs bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 font-semibold flex items-center justify-center gap-2'
+            : 'w-full py-2 rounded-xl text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-semibold flex items-center justify-center gap-2';
+    }
+
+    function checkAlarms() {
+        if (!state.prayerSchedule.length) return;
+        const now = new Date();
+        const todayStr = now.toDateString();
+        const fired = lsGet(K.firedAlarms, { day: '', keys: [] });
+        if (fired.day !== todayStr) { fired.day = todayStr; fired.keys = []; }
+
+        state.prayerSchedule.forEach(p => {
+            if (!ALARM_KEYS.includes(p.key)) return;
+            const diffSec = Math.abs((now.getTime() - p.dateObj.getTime()) / 1000);
+            if (diffSec <= 30 && !fired.keys.includes(p.key)) {
+                fired.keys.push(p.key);
+                lsSet(K.firedAlarms, fired);
+                triggerAlarm(p);
+            }
+        });
+    }
+
+    function triggerAlarm(prayer) {
+        showToast('Waktu ' + prayer.name + ' Telah Tiba', 'Saatnya menunaikan sholat ' + prayer.name + '. Semoga diterima Allah SWT.');
+        if (state.hapticEnabled && navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]);
+        if (state.soundEnabled) playAdhanChime();
+        if (state.notifEnabled && 'Notification' in window && Notification.permission === 'granted') {
+            try {
+                new Notification('Waktu ' + prayer.name + ' Telah Tiba', {
+                    body: 'Saatnya menunaikan sholat ' + prayer.name + ' (' + prayer.time + ').',
+                    icon: 'https://cdn-icons-png.flaticon.com/512/2565/2565398.png'
+                });
+            } catch (e) {}
+        }
+    }
+
+    let sharedAudioCtx = null;
+    function getAudioCtx() {
+        if (!sharedAudioCtx) sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        return sharedAudioCtx;
+    }
+    function unlockAudio() {
+        try { const ctx = getAudioCtx(); if (ctx.state === 'suspended') ctx.resume(); } catch (e) {}
+    }
+    function playAdhanChime() {
+        try {
+            const ctx = getAudioCtx();
+            const notes = [660, 550, 440, 550, 660];
+            notes.forEach((freq, i) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                const start = ctx.currentTime + i * 0.35;
+                osc.frequency.setValueAtTime(freq, start);
+                gain.gain.setValueAtTime(0.0001, start);
+                gain.gain.exponentialRampToValueAtTime(0.18, start + 0.05);
+                gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.32);
+                osc.connect(gain); gain.connect(ctx.destination);
+                osc.start(start); osc.stop(start + 0.34);
+            });
+        } catch (e) {}
+    }
+    function playClickSound() {
+        try {
+            const ctx = getAudioCtx();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(600, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.03);
+            gain.gain.setValueAtTime(0.1, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.03);
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.start(); osc.stop(ctx.currentTime + 0.03);
+        } catch (e) {}
+    }
+
+    function onMethodChange() {
+        state.method = document.getElementById('method-select').value;
+        lsSet(K.method, state.method);
+        fetchPrayerTimes(true);
+        showToast('Metode Diperbarui', 'Jadwal dihitung ulang dengan metode baru.');
+    }
+    function onIkhtiyatChange() {
+        state.ikhtiyat = Number(document.getElementById('ikhtiyat-input').value) || 0;
+        lsSet(K.ikhtiyat, state.ikhtiyat);
+        fetchPrayerTimes(true);
+    }
+
+    /* ============ TAB SWITCHING ============ */
+    function switchTab(tab) {
+        ['home', 'tasbih', 'quran', 'qibla', 'settings'].forEach(v => document.getElementById('view-' + v).classList.add('hidden'));
+        ['home', 'tasbih', 'quran', 'qibla', 'settings'].forEach(v => {
+            document.getElementById('nav-' + v).className = 'flex flex-col items-center gap-1 text-slate-400 transition w-12';
+        });
+        document.getElementById('view-' + tab).classList.remove('hidden');
+        document.getElementById('nav-' + tab).className = 'flex flex-col items-center gap-1 text-emerald-400 transition w-12';
+        if (tab === 'qibla') updateQiblaBearing();
+    }
+
+    /* ============ TASBIH ============ */
+    function todayKey() { return new Date().toDateString(); }
+    function renderTasbihUI() {
+        if (tasbih.dateStr !== todayKey()) { tasbih.dailyTotal = 0; tasbih.dateStr = todayKey(); }
+        document.getElementById('counter-display').innerText = tasbih.count;
+        document.getElementById('target-display').innerText = tasbih.target;
+        document.getElementById('dzikir-title').innerText = tasbih.name;
+        document.getElementById('daily-total-display').innerText = tasbih.dailyTotal;
+    }
+    function incrementTasbih() {
+        tasbih.count++; tasbih.dailyTotal++;
+        if (tasbih.dateStr !== todayKey()) tasbih.dateStr = todayKey();
+        document.getElementById('counter-display').innerText = tasbih.count;
+        document.getElementById('daily-total-display').innerText = tasbih.dailyTotal;
+        lsSet(K.tasbih, tasbih);
+
+        if (state.hapticEnabled && navigator.vibrate) navigator.vibrate(35);
+        if (state.soundEnabled) playClickSound();
+
+        if (tasbih.count >= tasbih.target) {
+            showToast('Target Tercapai!', 'Alhamdulillah, dzikir ' + tasbih.name + ' telah mencapai target ' + tasbih.target + 'x.');
+            if (state.hapticEnabled && navigator.vibrate) navigator.vibrate([100, 60, 100, 60, 200]);
+        }
+    }
+    function resetTasbih() {
+        tasbih.count = 0;
+        document.getElementById('counter-display').innerText = 0;
+        lsSet(K.tasbih, tasbih);
+    }
+    function toggleSound() {
+        state.soundEnabled = !state.soundEnabled; lsSet(K.sound, state.soundEnabled); updateSoundBtn();
+    }
+    function updateSoundBtn() {
+        const btn = document.getElementById('sound-toggle');
+        btn.innerHTML = state.soundEnabled ? '<i class="fa-solid fa-volume-high mr-1"></i> Suara: Aktif' : '<i class="fa-solid fa-volume-xmark mr-1"></i> Suara: Mati';
+    }
+    function toggleHaptic() {
+        state.hapticEnabled = !state.hapticEnabled; lsSet(K.haptic, state.hapticEnabled); updateHapticBtn();
+        if (state.hapticEnabled && navigator.vibrate) navigator.vibrate(30);
+    }
+    function updateHapticBtn() {
+        const btn = document.getElementById('haptic-toggle');
+        btn.innerHTML = state.hapticEnabled ? '<i class="fa-solid fa-mobile-screen-button mr-1"></i> Getar: Aktif' : '<i class="fa-solid fa-mobile-screen-button mr-1"></i> Getar: Mati';
+    }
+    function openDzikirModal() { document.getElementById('dzikir-modal').classList.remove('hidden'); }
+    function closeDzikirModal() { document.getElementById('dzikir-modal').classList.add('hidden'); }
+    function selectDzikir(name, target) {
+        tasbih.name = name; tasbih.target = target; tasbih.count = 0;
+        lsSet(K.tasbih, tasbih);
+        renderTasbihUI();
+        closeDzikirModal();
+    }
+
+    /* ============ QIBLA ============ */
+    const KAABA_LAT = 21.4225, KAABA_LNG = 39.8262;
+    function computeQiblaBearing(lat, lng) {
+        const toRad = d => d * Math.PI / 180, toDeg = r => r * 180 / Math.PI;
+        const phiK = toRad(KAABA_LAT), lambdaK = toRad(KAABA_LNG);
+        const phi = toRad(lat), lambda = toRad(lng);
+        const y = Math.sin(lambdaK - lambda);
+        const x = Math.cos(phi) * Math.tan(phiK) - Math.sin(phi) * Math.cos(lambdaK - lambda);
+        let brng = toDeg(Math.atan2(y, x));
+        return (brng + 360) % 360;
+    }
+    function updateQiblaBearing() {
+        if (state.lat === null) {
+            document.getElementById('qibla-bearing-text').innerText = 'Aktifkan lokasi GPS terlebih dahulu di Pengaturan untuk menghitung arah kiblat.';
+            return;
+        }
+        const bearing = computeQiblaBearing(state.lat, state.lng);
+        state.qiblaBearing = bearing;
+        document.getElementById('qibla-bearing-text').innerText = 'Arah kiblat: ' + bearing.toFixed(1) + '° dari Utara';
+        applyCompassRotation(0);
+    }
+    function applyCompassRotation(deviceHeading) {
+        if (state.qiblaBearing === undefined) return;
+        const rotation = state.qiblaBearing - (deviceHeading || 0);
+        const needle = document.getElementById('qibla-needle');
+        const kaaba = document.getElementById('kaaba-icon');
+        needle.style.transform = 'rotate(' + rotation + 'deg)';
+        kaaba.style.transform = 'rotate(' + rotation + 'deg)';
+        kaaba.style.transformOrigin = '2px 96px';
+    }
+    function requestCompassAccess() {
+        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+            DeviceOrientationEvent.requestPermission().then(res => {
+                if (res === 'granted') { window.addEventListener('deviceorientation', handleOrientation); showToast('Kompas Aktif', 'Putar perangkat Anda untuk melihat arah kiblat secara langsung.'); }
+                else showToast('Izin Ditolak', 'Izin sensor kompas ditolak.');
+            }).catch(() => showToast('Tidak Didukung', 'Perangkat tidak mendukung akses sensor kompas.'));
+        } else if ('DeviceOrientationEvent' in window) {
+            window.addEventListener('deviceorientation', handleOrientation);
+            showToast('Kompas Aktif', 'Putar perangkat Anda untuk melihat arah kiblat secara langsung.');
+        } else {
+            showToast('Tidak Didukung', 'Perangkat/browser ini tidak mendukung sensor kompas.');
+        }
+    }
+    function handleOrientation(e) {
+        const heading = e.webkitCompassHeading !== undefined ? e.webkitCompassHeading : (360 - e.alpha);
+        applyCompassRotation(heading);
+    }
+
+    /* ============ TOAST ============ */
+    function showToast(title, desc) {
+        const toast = document.getElementById('notification-toast');
+        document.getElementById('toast-title').innerText = title;
+        document.getElementById('toast-desc').innerText = desc;
+        toast.classList.remove('hidden');
+        toast.classList.add('flex');
+        clearTimeout(window._toastTimer);
+        window._toastTimer = setTimeout(hideToast, 4000);
+    }
+    function hideToast() {
+        clearTimeout(window._toastTimer);
+        const toast = document.getElementById('notification-toast');
+        toast.classList.add('hidden');
+        toast.classList.remove('flex');
+    }
+    </script>
+</body>
+</html>
