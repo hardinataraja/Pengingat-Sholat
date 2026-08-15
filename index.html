@@ -440,16 +440,24 @@
             dt.setMinutes(dt.getMinutes() + (Number(state.ikhtiyat) || 0));
             return { key: key, name: PRAYER_LABELS[key], time: dt.toTimeString().slice(0, 5), dateObj: dt };
         });
-        // find next
+        // find next prayer among today's list; if all have passed, roll over to tomorrow's Imsak
         let next = list.find(p => p.dateObj.getTime() > now.getTime());
-        if (!next) next = list[0]; // after Isha -> show Imsak/next day conceptually
+        let rolledOverToTomorrow = false;
+        if (!next) {
+            const tomorrowImsak = new Date(list[0].dateObj.getTime());
+            tomorrowImsak.setDate(tomorrowImsak.getDate() + 1);
+            next = { key: 'Imsak', name: PRAYER_LABELS.Imsak, time: tomorrowImsak.toTimeString().slice(0, 5), dateObj: tomorrowImsak };
+            rolledOverToTomorrow = true;
+        }
         list.forEach(p => {
             p.passed = p.dateObj.getTime() <= now.getTime();
-            p.active = p.key === next.key;
+            p.active = !rolledOverToTomorrow && p.key === next.key;
         });
         state.prayerSchedule = list;
         state.nextPrayerDate = next.dateObj;
         state.nextPrayerKey = next.key;
+        state.nextPrayerName = next.name;
+        state.nextPrayerTimeStr = next.time;
         renderPrayerList();
         renderNextPrayerCard();
 
@@ -472,10 +480,9 @@
     }
 
     function renderNextPrayerCard() {
-        const next = state.prayerSchedule.find(p => p.key === state.nextPrayerKey);
-        if (!next) return;
-        document.getElementById('next-prayer-name').innerText = next.name;
-        document.getElementById('next-prayer-time').innerText = next.time;
+        if (!state.nextPrayerName) return;
+        document.getElementById('next-prayer-name').innerText = state.nextPrayerName;
+        document.getElementById('next-prayer-time').innerText = state.nextPrayerTimeStr;
     }
 
     /* ============ CLOCK / COUNTDOWN ============ */
@@ -484,7 +491,7 @@
 
         if (state.nextPrayerDate) {
             let diff = Math.floor((state.nextPrayerDate.getTime() - now.getTime()) / 1000);
-            if (diff < 0) { fetchPrayerTimes(false); diff = 0; }
+            if (diff <= 0) diff = 0; // day-rollover refresh is handled by the separate date-watch interval
             const hh = String(Math.floor(diff / 3600)).padStart(2, '0');
             const mm = String(Math.floor((diff % 3600) / 60)).padStart(2, '0');
             const ss = String(diff % 60).padStart(2, '0');
